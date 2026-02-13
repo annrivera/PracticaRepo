@@ -1,0 +1,133 @@
+Data---ClientRepository
+
+using Dapper;
+using MySql.Data.MySqlClient;
+using System.Data;
+using TestClientsAPI.Models;
+
+namespace TestClientsAPI.Data
+{
+    public class ClientsRepository
+    {
+        private readonly string _connectionString;
+
+        public ClientsRepository(IConfiguration configuration)
+        {
+            _connectionString = configuration.GetConnectionString("DefaultConnection");
+        }
+
+        private IDbConnection Connection()
+            => new MySqlConnection(_connectionString);
+
+        public IEnumerable<Clients> GetAll()
+        {
+            using var db = Connection();
+            return db.Query<Clients>("SELECT * FROM clientes");
+        }
+
+        public Clients GetById(int id)
+        {
+            using var db = Connection();
+            return db.QueryFirstOrDefault<Clients>(
+                "SELECT * FROM clientes WHERE id = @Id",
+                new { Id = id });
+        }
+
+        public void Create(Clients cliente)
+        {
+            using var db = Connection();
+            string sql = @"INSERT INTO clientes 
+                       (nombre, cedula, nacionalidad, genero, estado_civil)
+                       VALUES (@Nombre, @Cedula, @Nacionalidad, @Genero, @Estado_Civil)";
+            db.Execute(sql, cliente);
+        }
+
+        public void Update(int id, Clients cliente)
+        {
+            using var db = Connection();
+            string sql = @"UPDATE clientes SET
+                       nombre=@Nombre,
+                       cedula=@Cedula,
+                       nacionalidad=@Nacionalidad,
+                       genero=@Genero,
+                       estado_civil=@Estado_Civil
+                       WHERE id=@Id";
+            db.Execute(sql, new
+            {
+                cliente.Nombre,
+                cliente.Cedula,
+                cliente.Nacionalidad,
+                cliente.Genero,
+                cliente.Estado_Civil,
+                Id = id
+            });
+        }
+
+        public void Delete(int id)
+        {
+            using var db = Connection();
+            db.Execute("DELETE FROM clientes WHERE id=@Id", new { Id = id });
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+Controller---ClientController
+
+using Dapper;
+using Microsoft.AspNetCore.Mvc;
+using MySql.Data.MySqlClient;
+using MySqlX.XDevAPI;
+using System.Data;
+using TestClientsAPI.Data;
+using TestClientsAPI.Models;
+
+namespace TestClientsAPI.Controllers
+{
+    [ApiController]
+    [Route("clientes")]
+    public class ClientesController : ControllerBase
+    {
+        private readonly ClientsRepository _repo;
+
+        public ClientesController(ClientsRepository repo)
+        {
+            _repo = repo;
+        }
+
+        [HttpGet]
+        public IActionResult GetAll()
+            => Ok(_repo.GetAll());
+
+        [HttpGet("{id}")]
+        public IActionResult Get(int id)
+        {
+            var cliente = _repo.GetById(id);
+            if (cliente == null) return NotFound();
+            return Ok(cliente);
+        }
+
+        [HttpPost]
+        public IActionResult Create([FromBody] Clients cliente)
+        {
+            _repo.Create(cliente);
+            return Ok("Creado");
+        }
+
+        [HttpPut("{id}")]
+        public IActionResult Update(int id, [FromBody] Clients cliente)
+        {
+            _repo.Update(id, cliente);
+            return Ok("Actualizado");
+        }
+
+        [HttpDelete("{id}")]
+        public IActionResult Delete(int id)
+        {
+            _repo.Delete(id);
+            return Ok("Eliminado");
+        }
+    }
+
+}
